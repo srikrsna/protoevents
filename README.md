@@ -1,4 +1,4 @@
-# protoevents (PGF)
+# protoevents
 
 protoevents is a protoc extension used to dispatch events upon successful completion of grpc method calls. As of now it only supports Go.
 
