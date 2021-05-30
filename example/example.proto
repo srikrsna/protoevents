@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package example;
+
+import "events/events.proto";
+
+option go_package = "github.com/srikrsna/protoevents/example;expb";
+
+service ExampleService {
+  rpc ExampleFiringRpc(ExampleRpcRequest) returns (ExampleRpcResponse) {
+    option (events.fire) = true;
+  }
+
+  rpc ExampleSilentRpc(ExampleRpcRequest) returns (ExampleRpcResponse);
+}
+
+message ExampleRpcRequest {}
+
+message ExampleRpcResponse {}

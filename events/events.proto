@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package events;
+
+option go_package = "github.com/srikrsna/protoevents/events;evpb";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MethodOptions { bool fire = 2983808; }
