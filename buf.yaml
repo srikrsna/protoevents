@@ -1,7 +1,11 @@
 version: v1beta1
+name: buf.build/srikrsna/events
 build:
   roots:
     - .
+  excludes:
+    - encoding
+    - example
 lint:
   use:
     - BASIC
