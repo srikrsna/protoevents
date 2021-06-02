@@ -34,12 +34,36 @@ type Options struct {
 	Dispatcher Dispatcher
 
 	ErrorLogger ErrorLogger
+
+	Preprocess bool
 }
 
 func NewInterceptor(opt Options) grpc.UnaryServerInterceptor {
+	var shouldFire func(method string) (bool, error)
+	if !opt.Preprocess {
+		shouldFire = lazy
+	} else {
+		preprocess()
+		shouldFire = eager
+	}
+
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		resp, err = handler(ctx, req)
 		if err != nil {
+			return
+		}
+
+		v, err := shouldFire(info.FullMethod)
+		if err != nil {
+			opt.ErrorLogger.Log(ctx, &Event{
+				Id:       "evt_" + slugid.Nice(),
+				Type:     info.FullMethod,
+				Request:  req.(protoreflect.ProtoMessage),
+				Response: resp.(protoreflect.ProtoMessage),
+			}, err)
+		}
+
+		if !v {
 			return
 		}
 
@@ -53,37 +77,60 @@ func NewInterceptor(opt Options) grpc.UnaryServerInterceptor {
 			Response: resp.(protoreflect.ProtoMessage),
 		}
 
-		mutex.RLock()
-		v, ok := cache[info.FullMethod]
-		mutex.RUnlock()
-		if !ok {
-			parts := strings.Split(info.FullMethod, "/")
-			serviceName := protoreflect.FullName(parts[1])
-			methodName := protoreflect.Name(parts[2])
-
-			descriptor, derr := protoregistry.GlobalFiles.FindDescriptorByName(serviceName)
-			if derr != nil {
-				opt.ErrorLogger.Log(ctx, evt, derr)
-				return
-			}
-
-			v = descriptor.(protoreflect.ServiceDescriptor).Methods().ByName(methodName).Options().ProtoReflect().Get(evtpb.E_Fire.TypeDescriptor()).Bool()
-
-			mutex.Lock()
-			cache[info.FullMethod] = v
-			mutex.Unlock()
-		}
-
-		if !v {
-			return
-		}
-
 		if err := opt.Dispatcher.Dispatch(ctx, evt); err != nil {
 			opt.ErrorLogger.Log(ctx, evt, err)
 		}
 
 		return
 	}
+}
+
+func lazy(method string) (bool, error) {
+	mutex.RLock()
+	v, ok := cache[method]
+	mutex.RUnlock()
+	if !ok {
+		parts := strings.Split(method, "/")
+		serviceName := protoreflect.FullName(parts[1])
+		methodName := protoreflect.Name(parts[2])
+
+		descriptor, err := protoregistry.GlobalFiles.FindDescriptorByName(serviceName)
+		if err != nil {
+			return false, err
+		}
+
+		v = getFromMethod(descriptor.(protoreflect.ServiceDescriptor).Methods().ByName(methodName))
+
+		mutex.Lock()
+		cache[method] = v
+		mutex.Unlock()
+	}
+
+	return v, nil
+}
+
+func preprocess() {
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		services := fd.Services()
+		for i := 0; i < services.Len(); i++ {
+			s := services.Get(i)
+			methods := s.Methods()
+			for j := 0; j < methods.Len(); j++ {
+				m := methods.Get(j)
+				cache["/"+string(s.FullName())+"/"+string(m.Name())] = getFromMethod(m)
+			}
+		}
+
+		return true
+	})
+}
+
+func getFromMethod(md protoreflect.MethodDescriptor) bool {
+	return md.Options().ProtoReflect().Get(evtpb.E_Fire.TypeDescriptor()).Bool()
+}
+
+func eager(method string) (bool, error) {
+	return cache[method], nil
 }
 
 var cache = map[string]bool{}

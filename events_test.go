@@ -27,6 +27,7 @@ func TestInterceptor(t *testing.T) {
 	i := protoevents.NewInterceptor(protoevents.Options{
 		Dispatcher:  disp,
 		ErrorLogger: el,
+		Preprocess:  true,
 	})
 
 	lis := bufconn.Listen(1024 * 1024)
