@@ -8,6 +8,7 @@ import (
 	evtpb "github.com/srikrsna/protoevents/events"
 	"github.com/taskcluster/slugid-go/slugid"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -126,7 +127,7 @@ func preprocess() {
 }
 
 func getFromMethod(md protoreflect.MethodDescriptor) bool {
-	return md.Options().ProtoReflect().Get(evtpb.E_Fire.TypeDescriptor()).Bool()
+	return proto.GetExtension(md.Options(), evtpb.E_Fire).(bool)
 }
 
 func eager(method string) (bool, error) {
